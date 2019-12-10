@@ -26,9 +26,6 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe) # do not perform gradient descent on positional embeddings!!
 
     def forward(self, x): # BERT also adds positional encodings directly to embeddings
-        print("x and pe dims")
-        print(x.shape)
-        print(self.pe[:, :x.size(1), :].shape)
         x = x + self.pe[:, :x.size(1), :] # only include sentence-length many points
         return self.dropout(x)
 
@@ -55,6 +52,7 @@ class TransformerClassifier(nn.Module):
         encoder_layers = TransformerEncoderLayer(embedding_dim, nhead, feedforward_dim, dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers) # transformer
         self.linear_classifier = nn.Linear(embedding_dim, labels) # transformer output to class scores
+        self.softmax = nn.Softmax(dim=1) # softmax over scores
         self.init_weights()
 
     def init_weights(self):
@@ -70,8 +68,20 @@ class TransformerClassifier(nn.Module):
         word_pos_embed = self.pos_encoder(word_embedding)
         encoder_output = (self.transformer_encoder(word_pos_embed)[:,0,:]).squeeze(1) # use only the first word's embedding
         scores = self.linear_classifier(encoder_output)
-        softmax_scores = nn.Softmax(scores, dim=1) # softmax over scores
+        softmax_scores = self.softmax(scores) # softmax over scores
         return softmax_scores
 
 
+# for debugging
+if __name__ == "__main__":
+    vocab_size = 5
+    labels = 6
+    embedding_dim = 32
+    nhead = 1
+    feedforward_dim = 64
+    nlayers = 1
+    t = TransformerClassifier(vocab_size, labels, embedding_dim, nhead, feedforward_dim, nlayers)
+    #out = t.forward(torch.rand(3, 10, vocab_size).long())
+    out = t.forward(torch.from_numpy(np.array([[3, 2, 4], [0, 1, 4]])))
+    print(out.sum(1)) # batch axis all sums to 1
 
