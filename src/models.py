@@ -47,7 +47,7 @@ class TransformerClassifier(nn.Module):
         super(TransformerClassifier, self).__init__()
         self.embedding_dim = embedding_dim
         self.labels = labels
-        self.encoder = nn.Embedding(vocab_size, embedding_dim) # word embedding layer
+        self.embedding = nn.Embedding(vocab_size, embedding_dim) # word embedding layer
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout) # positional embedding
         encoder_layers = TransformerEncoderLayer(embedding_dim, nhead, hidden_dim, dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers) # transformer
@@ -55,19 +55,20 @@ class TransformerClassifier(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        initrange = np.sqrt(6) / np.sqrt(2 * self.embedding_dim) # glorot initialization
-        self.encoder.weight.data.uniform_(-initrange, initrange)
+        initrange = 0.1 # small variance has been shown to lead to better embedding initialization
+        self.embedding.weight.data.uniform_(-initrange, initrange)
         self.linear_classifier.bias.data.zero_()
         initrange = np.sqrt(6) / np.sqrt(self.embedding_dim + self.labels) # glorot initialization
         self.linear_classifier.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src):
         """ src must be formatted with dims (batch_size, sentence_length, one_hot_labels) """
-        src = self.encoder(src) * math.sqrt(self.embedding_dim)
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, self.src_mask)
-        output = self.linear_classifier(output)
-        return output
+        word_embedding = self.embedding(src)
+        word_pos_embed = self.pos_encoder(word_embedding)
+        encoder_output = (self.transformer_encoder(word_pos_embed)[:,0,:]).squeeze(1) # use only the first word's embedding
+        scores = self.linear_classifier(encoder_output)
+        softmax_scores = nn.Softmax(scores, dim=1) # softmax over scores
+        return softmax_scores
 
 
 
