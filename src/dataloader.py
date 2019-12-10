@@ -116,6 +116,7 @@ class WikiDataset(Dataset):
         cleaned_comment_df["comment"] = cleaned_comment_df["comment"].apply(lambda x: x.replace("NEWLINE_TOKEN", " "))
         cleaned_comment_df["comment"] = cleaned_comment_df["comment"].apply(lambda x: x.replace("TAB_TOKEN", " "))
 
+        self.vocab = vocab
         self.x = cleaned_comment_df["comment"].apply(self.vocab.get_index_list_from_sentence).values
         self.y = (annotation_df[annotation_df["rev_id"].isin(cleaned_comment_df["rev_id"])].groupby("rev_id")["attack"].mean() > 0.5).values
 
@@ -178,7 +179,7 @@ def get_data():
     vocab = Vocabulary([comment_df["comment"], body_df["articleBody"], stance_df["Headline"]])
     annotation_df = pd.read_csv("../data/attack_annotations.tsv",  sep='\t')
 
-    wiki_dataset = WikiDataset(comment_df, pd.read_csv("../data/attack_annotations.tsv",  sep='\t'), vocab)
+    wiki_dataset = WikiDataset(comment_df, annotation_df, vocab)
     fake_news_dataset = FakeNewsDataset(body_df, stance_df, vocab)
 
     return vocab, {"wiki": wiki_dataset, "fake news": fake_news_dataset}
