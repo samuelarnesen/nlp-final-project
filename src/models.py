@@ -26,6 +26,9 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe) # do not perform gradient descent on positional embeddings!!
 
     def forward(self, x): # BERT also adds positional encodings directly to embeddings
+        print("x and pe dims")
+        print(x.shape)
+        print(self.pe[:, :x.size(1), :].shape)
         x = x + self.pe[:, :x.size(1), :] # only include sentence-length many points
         return self.dropout(x)
 
@@ -33,14 +36,14 @@ class PositionalEncoding(nn.Module):
 # implement classification transformer specific for our application
 class TransformerClassifier(nn.Module):
 
-    def __init__(self, vocab_size, labels, embedding_dim, nhead, hidden_dim, nlayers, dropout=0.5):
+    def __init__(self, vocab_size, labels, embedding_dim, nhead, feedforward_dim, nlayers, dropout=0.5):
         """
         Args:
             vocab_size: number of words/max index of our vocabulary
             labels: number of labels in our predictions
             embedding_dim: word embedding dimension
             nhead: number of attention heads
-            hidden_dim: hidden dimension of feedforward layers
+            feedforward_dim: dimension of feedforward layers
             nlayers: number of attention layers to stack
             dropout: dropout rate
         """
@@ -49,7 +52,7 @@ class TransformerClassifier(nn.Module):
         self.labels = labels
         self.embedding = nn.Embedding(vocab_size, embedding_dim) # word embedding layer
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout) # positional embedding
-        encoder_layers = TransformerEncoderLayer(embedding_dim, nhead, hidden_dim, dropout)
+        encoder_layers = TransformerEncoderLayer(embedding_dim, nhead, feedforward_dim, dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers) # transformer
         self.linear_classifier = nn.Linear(embedding_dim, labels) # transformer output to class scores
         self.init_weights()
