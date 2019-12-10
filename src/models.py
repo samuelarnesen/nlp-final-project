@@ -83,5 +83,6 @@ if __name__ == "__main__":
     t = TransformerClassifier(vocab_size, labels, embedding_dim, nhead, feedforward_dim, nlayers)
     #out = t.forward(torch.rand(3, 10, vocab_size).long())
     out = t.forward(torch.from_numpy(np.array([[3, 2, 4], [0, 1, 4]])))
+    print(out)
     print(out.sum(1)) # batch axis all sums to 1
 
