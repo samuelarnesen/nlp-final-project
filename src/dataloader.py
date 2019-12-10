@@ -176,7 +176,7 @@ def get_data():
     body_df = pd.read_csv("../data/fake_news_bodies.csv")
     stance_df = pd.read_csv("../data/fake_news_stances.csv")
     vocab = Vocabulary([comment_df["comment"], body_df["articleBody"], stance_df["Headline"]])
-    annotations_df = pd.read_csv("../data/attack_annotations.tsv",  sep='\t')
+    annotation_df = pd.read_csv("../data/attack_annotations.tsv",  sep='\t')
 
     wiki_dataset = WikiDataset(comment_df, annotation_df, vocab)
     fake_news_dataset = FakeNewsDataset(body_df, stance_df, vocab)
