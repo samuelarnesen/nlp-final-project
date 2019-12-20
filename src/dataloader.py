@@ -118,7 +118,8 @@ class WikiDataset(Dataset):
 
         self.vocab = vocab
         self.x = cleaned_comment_df["comment"].apply(self.vocab.get_index_list_from_sentence).values
-        self.x = np.array([np.array(x) for x in self.x])
+        max_len = np.max([len(x) for x in self.x])
+        self.x = np.array([np.array(x + (max_len - len(x)) * [0]) for x in self.x])
         self.y = (annotation_df[annotation_df["rev_id"].isin(cleaned_comment_df["rev_id"])].groupby("rev_id")["attack"].mean() > 0.5).values
         self.y = np.array([int(i) for i in self.y])
         self.y = np.array([np.array([int(i == j) for i in range(2)]) for j in self.y]) # 2 classes because binary classification
