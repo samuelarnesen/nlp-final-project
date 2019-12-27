@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import os.path
 
-class Vocabulary:
 
+class Vocabulary:
     """
     Class for converting words to indexes and back out again
     """
@@ -17,7 +17,7 @@ class Vocabulary:
 
         @param series_list (list(pd.Series)): list of pandas series to be used to form vocabulary
         """
-
+        
         vocab_dict = dict()
         def add_entry_if_necessary(entry):
             words = entry.split()
@@ -56,7 +56,6 @@ class Vocabulary:
         return len(self.index_to_word)
 
     def get_index_list_from_sentence(self, sentence):
-
         """
         Converts a sentence into a list of indices
 
@@ -75,7 +74,6 @@ class Vocabulary:
         return idx_list
 
     def get_tensor_from_sentences(self, sentences, device: torch.device):
-
         """
         Makes a torch tensor from a batch of sentences
 
@@ -84,26 +82,22 @@ class Vocabulary:
 
         @returns tensor (torch.tensor): padded tensor of input sentences 
         """
-
+        return torch.t(torch.tensor(self.pad_sentences(sentences), dtype=torch.long, device=device))
+    
+    def pad_sentences(self, sentences):
         max_length = max(len(sentence) for sentence in sentences)
-
-        word_idxs = list()
-        for sentence in sentences:
-            word_idxs.append(sentence)
-            while len(word_idxs[-1]) < max_length:
-                word_idxs[-1].append(self["<pad>"])
-
-        return torch.t(torch.tensor(word_idxs, dtype=torch.long, device=device))
+        word_idxs = np.zeros((len(sentences), max_length), dtype=np.dtype(int)) # pad id == 0
+        for i, s in enumerate(sentences):
+            word_idxs[i,:len(s)] = s
+        return word_idxs
 
 
 class WikiDataset(Dataset):
-
     """
     Class for storing input data from Wikipedia dataset
     """
 
     def __init__(self, comment_df: pd.DataFrame, annotation_df: pd.DataFrame, vocab: Vocabulary):
-
         """
         @param comment_df (pd.DataFrame): pandas DataFrame with "comments" section that is used as the input
         @param annotation_df (pd.DataFrame): pandas DataFrame that stores the labels
@@ -112,20 +106,22 @@ class WikiDataset(Dataset):
 
         super().__init__()
 
+        self.vocab = vocab
+        
         cleaned_comment_df = comment_df.copy()
         cleaned_comment_df["comment"] = cleaned_comment_df["comment"].apply(lambda x: x.replace("NEWLINE_TOKEN", " "))
         cleaned_comment_df["comment"] = cleaned_comment_df["comment"].apply(lambda x: x.replace("TAB_TOKEN", " "))
 
-        self.vocab = vocab
         self.x = cleaned_comment_df["comment"].apply(self.vocab.get_index_list_from_sentence).values
-        max_len = np.max([len(x) for x in self.x])
-        self.x = np.array([np.concatenate((np.array(x), np.zeros(max_len - len(x)))) for x in self.x])
+        self.x = self.vocab.pad_sentences(self.x)
         self.y = (annotation_df[annotation_df["rev_id"].isin(cleaned_comment_df["rev_id"])].groupby("rev_id")["attack"].mean() > 0.5).values
         self.y = np.array([int(i) for i in self.y])
-        self.y = np.array([np.array([int(i == j) for i in range(2)]) for j in self.y]) # 2 classes because binary classification
-
+        self._num_labels = np.max(self.y) + 1
+        
+    def num_labels(self):
+        return self._num_labels
+        
     def __getitem__(self, index):
-
         """
         @returns (tuple(List(int), bool)): first term is a list of the indices of the words of the input sentence at the specified index
                                            second term is boolean corresponding to whether it is an attack (True) or not (False)
@@ -134,6 +130,7 @@ class WikiDataset(Dataset):
 
     def __len__(self):
         return len(self.x)
+
 
 class FakeNewsDataset(Dataset):
 
@@ -152,21 +149,22 @@ class FakeNewsDataset(Dataset):
 
         x_list = []
         y_list = []
-        for row in stance_df.iterrows():
-            idx = row[1]["Body ID"]
-            headline = self.vocab.get_index_list_from_sentence(row[1]["Headline"])
-            body = body_df[body_df["Body ID"] == idx].iloc[0]["sentence_as_idx"]
-            x_list.append(np.concatenate([headline, body]))
+        idx_to_id = {body_id:i for (i, body_id) in enumerate(body_df['Body ID'])}
 
-            y_val = np.zeros(num_stances)
-            y_val[stance_to_idx[row[1]["Stance"]]] = 1
-            y_list.append(y_val)
+        for body_id, headline, stance in zip(stance_df["Body ID"], stance_df["Headline"], stance_df["Stance"]):
+            head = vocab.get_index_list_from_sentence(headline)
+            body = body_df.iloc[idx_to_id[body_id]]["sentence_as_idx"]
+            x_list.append(head + body)
+            y_list.append(stance_to_idx[stance])
 
-        self.x = np.array(x_list)
+        self.x = self.vocab.pad_sentences(x_list)
         self.y = np.array(y_list)
+        self._num_labels = np.max(self.y) + 1
+
+    def num_labels(self):
+        return self._num_labels
 
     def __getitem__(self, index):
-
         return (self.x[index], self.y[index])
 
     def __len__(self):
@@ -194,5 +192,14 @@ def get_data():
 
     train_data = WikiDataset(train_df, annotations_df)
     """
+
+# test get_data method
+if __name__ == "__main__":
+    print("getting data")
+    vocab, data = get_data()
+    print("success, check content:")
+    wiki, fake = data['wiki'], data['fake news']
+    print(wiki[0:2])
+    print(fake[0:2])
 
 
