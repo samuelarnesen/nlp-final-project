@@ -14,7 +14,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from bert_dataloader import get_wiki_data, get_fake_data
-from bert_models import BertMultiHeadModel # Custom model
+from bert_models import BertMultiHeadModel # Custom model 
 
 
 # create/empty directory to save models in
@@ -80,6 +80,7 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
     print("starting training")
     train_start = time.time()
     for epoch in range(1 if debugging else args['epochs']):
+        print("\nstarting epoch {} out of {}".format(epoch+1, args['epochs']))
         model.train() # turn on train mode (turned off in evaluate)
         total_loss = 0.
         curr = 0
@@ -99,6 +100,9 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
+            if (10*int(curr/args['batch_size'])) % int(n / batch_size) == 0:
+                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / batch_size)))
+                print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)
         epoch_time = time.time() - epoch_time

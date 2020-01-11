@@ -93,6 +93,8 @@ def train(dataset, save_dir, args, debugging=False):
     print("starting training")
     train_start = time.time()
     for epoch in range(1 if debugging else args['epochs']):
+        print("\nstarting epoch {} out of {}".format(epoch+1, args['epochs']))
+        print("time taken so far: {}\n".format(time.time() - train_start))
         model.train() # turn on train mode (turned off in evaluate)
         total_loss = 0.
         curr = 0
@@ -112,6 +114,9 @@ def train(dataset, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
+            if (10*int(curr/args['batch_size'])) % int(n / batch_size) == 0:
+                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / batch_size)))
+                print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)
         epoch_time = time.time() - epoch_time
