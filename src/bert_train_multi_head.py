@@ -65,9 +65,10 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
 
     """ prepare dataset and saving directory """
     if not debugging: new_dir(save_dir)
-    train, dev, test = dataset['train'], dataset['dev'], dataset['test']
-    num_labels = train.num_labels()
-    n = len(dataset['train'])
+    wiki_train, wiki_dev, wiki_test = wiki_data['train'], wiki_data['dev'], wiki_data['test']
+    fake_train, fake_dev, fake_test = fake_data['train'], fake_data['dev'], fake_data['test']
+    wiki_num_labels, fake_num_labels = wiki_train.num_labels(), fake_train.num_labels()
+    wiki_n, fake_n = len(wiki_train), len(fake_train)
 
     """ create model and prepare optimizer """
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
@@ -101,7 +102,7 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
             scheduler.step()
             if debugging: break # only 1 batch when debugging
             if (10*int(curr/args['batch_size'])) % int(n / batch_size) == 0:
-                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / batch_size)))
+                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / args['batch_size'])))
                 print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)
@@ -146,9 +147,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir_name', type=str, default='') # location to store trained models in
     parser.add_argument('--dataset', type=str, default='', help='either wiki or fake_news') # which dataset to use?
-    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--epochs', type=int, default=1)
     parser.add_argument('--batch_size', type=int, default=32) # max possible
-    parser.add_argument('--lr', type=float, default=3e-5)
+    parser.add_argument('--lr', type=float, default=2e-5)
     parser.add_argument('--clip_grad_norm', type=float, default=1.0)
     parser.add_argument('--save_frequency', type=int, default=1)
     parser.add_argument('--debug', action='store_true') # debug mode - not training or saving models

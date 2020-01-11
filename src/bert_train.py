@@ -11,7 +11,7 @@ import shutil
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 
 from bert_dataloader import get_wiki_data, get_fake_data
 
@@ -71,6 +71,8 @@ def train(dataset, save_dir, args, debugging=False):
     num_labels = train.num_labels()
     n = len(dataset['train'])
 
+<<<<<<< HEAD
+=======
     """ create dataloader """
     frequencies = {}
     for pair in train:
@@ -83,8 +85,10 @@ def train(dataset, save_dir, args, debugging=False):
     sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
     train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'], shuffle=True)
 
+>>>>>>> d95b025eb9d54473a1fa8a8e8ba9a09b46c7e7d5
     """ create model and prepare optimizer """
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
@@ -114,8 +118,8 @@ def train(dataset, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
-            if (10*int(curr/args['batch_size'])) % int(n / batch_size) == 0:
-                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / batch_size)))
+            if (10*int(curr/args['batch_size'])) % int(n / args['batch_size']) == 0:
+                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / args['batch_size'])))
                 print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)
