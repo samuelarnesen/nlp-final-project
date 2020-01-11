@@ -84,14 +84,22 @@ class Vocabulary:
         """
         return torch.t(torch.tensor(self.pad_sentences(sentences), dtype=torch.long, device=device))
     
-    def pad_sentences(self, sentences, max_len):
+    def pad_sentences(self, sentences, max_len, include_long):
         lengths = np.array([len(s) for s in sentences])
-        valid_indices = (lengths <= max_len)
-        true_max_len = np.max(lengths[valid_indices])
-        word_idxs = np.zeros((len(lengths[valid_indices]), true_max_len), dtype=np.dtype(int)) # pad id == 0
-        for i, s in enumerate(sentences[valid_indices]):
-            word_idxs[i,:len(s)] = s
-        return word_idxs, valid_indices
+        if include_long:
+            valid_indices = (lengths >= 0) # all true
+            word_idxs = np.zeros((len(lengths), max_len), dtype=np.dtype(int)) # pad id == 0
+            for i, s in enumerate(sentences[valid_indices]):
+                sent_len = min(max_len, len(s))
+                word_idxs[i,:sent_len] = s[:sent_len] # cut off too long sentences
+            return word_idxs, valid_indices
+        else:
+            valid_indices = (lengths <= max_len)
+            true_max_len = np.max(lengths[valid_indices])
+            word_idxs = np.zeros((len(lengths[valid_indices]), true_max_len), dtype=np.dtype(int)) # pad id == 0
+            for i, s in enumerate(sentences[valid_indices]):
+                word_idxs[i,:len(s)] = s
+            return word_idxs, valid_indices
 
 
 class WikiDataset(Dataset):
@@ -99,11 +107,13 @@ class WikiDataset(Dataset):
     Class for storing input data from Wikipedia dataset
     """
 
-    def __init__(self, comment_df: pd.DataFrame, annotation_df: pd.DataFrame, vocab: Vocabulary, max_len=400):
+    def __init__(self, comment_df: pd.DataFrame, annotation_df: pd.DataFrame, vocab: Vocabulary, max_len=400, include_long=False):
         """
         @param comment_df (pd.DataFrame): pandas DataFrame with "comments" section that is used as the input
         @param annotation_df (pd.DataFrame): pandas DataFrame that stores the labels
         @param vocab (Vocabulary): vocabulary to be used 
+        @param max_len (int): the maximum length of x values in dataset
+        @param include_long (bool): whether to include data points with too long x's (cut off)
         """
 
         super().__init__()
@@ -115,7 +125,7 @@ class WikiDataset(Dataset):
         cleaned_comment_df["comment"] = cleaned_comment_df["comment"].apply(lambda x: x.replace("TAB_TOKEN", " "))
 
         self.x = cleaned_comment_df["comment"].apply(self.vocab.get_index_list_from_sentence).values
-        self.x, indices = self.vocab.pad_sentences(self.x, max_len)
+        self.x, indices = self.vocab.pad_sentences(self.x, max_len, include_long)
         self.y = (annotation_df[annotation_df["rev_id"].isin(cleaned_comment_df["rev_id"])].groupby("rev_id")["attack"].mean() > 0.5).values
         self.y = np.array([int(i) for i in self.y])[indices]
         self._num_labels = np.max(self.y) + 1
@@ -136,7 +146,7 @@ class WikiDataset(Dataset):
 
 class FakeNewsDataset(Dataset):
 
-    def __init__(self, body_df: pd.DataFrame, stance_df: pd.DataFrame, vocab: Vocabulary, max_len=1200):
+    def __init__(self, body_df: pd.DataFrame, stance_df: pd.DataFrame, vocab: Vocabulary, max_len=1200, include_long=False):
 
         super().__init__()
         self.vocab = vocab
@@ -159,7 +169,7 @@ class FakeNewsDataset(Dataset):
             x_list.append(head + body)
             y_list.append(stance_to_idx[stance])
 
-        self.x, indices = self.vocab.pad_sentences(np.array(x_list), max_len)
+        self.x, indices = self.vocab.pad_sentences(np.array(x_list), max_len, include_long)
         self.y = np.array(y_list)[indices]
         self._num_labels = np.max(self.y) + 1
 
