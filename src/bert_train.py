@@ -119,7 +119,7 @@ def train(dataset, save_dir, args, debugging=False):
             scheduler.step()
             if debugging: break # only 1 batch when debugging
             if (10*int(curr/args['batch_size'])) % int(n / args['batch_size']) == 0:
-                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / args['batch_size'])))
+                print("{:4f}% through training".format(100*curr/n))
                 print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)

@@ -101,8 +101,8 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
-            if (10*int(curr/args['batch_size'])) % int(n / batch_size) == 0:
-                print("{:4f}% through training".format(10*(10*int(curr/args['batch_size'])) / int(n / args['batch_size'])))
+            if (10*int(curr/args['batch_size'])) % int(n / args['batch_size']) == 0:
+                print("{:4f}% through training".format(100*curr/n))
                 print("time taken so far: {}\n".format(time.time() - train_start))
 
         total_loss /= len(train)
