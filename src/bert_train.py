@@ -69,6 +69,7 @@ def train(dataset, save_dir, args, debugging=False):
     if not debugging: new_dir(save_dir)
     train, dev, test = dataset['train'], dataset['dev'], dataset['test']
     num_labels = train.num_labels()
+    n = len(dataset['train'])
 
     """ create model and prepare optimizer """
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
@@ -83,17 +84,18 @@ def train(dataset, save_dir, args, debugging=False):
     for epoch in range(1 if debugging else args['epochs']):
         model.train() # turn on train mode (turned off in evaluate)
         total_loss = 0.
-        predictions = np.zeros(n) # used for confusion matrix
-        truth = np.zeros(n)
+        curr = 0
+        predictions = np.zeros(args['batch_size'] if debugging else n) # used for confusion matrix
+        truth = np.zeros(args['batch_size'] if debugging else n)
         epoch_time = time.time()
         for (x_batch, y_batch) in train_dataloader: # different shuffle each time
             optimizer.zero_grad()
             output = model(x_batch, labels=y_batch)
             loss, preds = output[0], output[1]
-            predictions[curr:min(n,curr+batch_size)] = torch.argmax(preds, axis=1)
-            truth[curr:min(n,curr+batch_size)] = y
+            predictions[curr:min(n,curr+args['batch_size'])] = torch.argmax(preds, axis=1)
+            truth[curr:min(n,curr+args['batch_size'])] = y_batch
             total_loss += loss.item()
-            curr += batch_size
+            curr += args['batch_size']
             loss.backward() # loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args['clip_grad_norm'])
             optimizer.step()
@@ -116,6 +118,7 @@ def train(dataset, save_dir, args, debugging=False):
         if not debugging:
             if (epoch+1) % args['save_frequency'] == 0 and epoch+1 != args['epochs']:
                 path = os.path.join(save_dir, "epoch-{}".format(epoch+1))
+                new_dir(path)
                 model.save_pretrained(path)
             
     """ evaluate and save final model """
@@ -123,6 +126,7 @@ def train(dataset, save_dir, args, debugging=False):
     evaluate(model, test, num_labels)
     if not debugging:
         path = os.path.join(save_dir, "final")
+        new_dir(path)
         model.save_pretrained(path)
     """ 
     Note: see https://stackoverflow.com/questions/42703500/
@@ -136,15 +140,15 @@ def train(dataset, save_dir, args, debugging=False):
 
 if __name__ == "__main__":
 
-    print("\nstart training\n")
+    print("\nbert_train\n")
 
     """ parse hyperparameters and other specifications """
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir_name', type=str, default='') # location to store trained models in
     parser.add_argument('--dataset', type=str, default='', help='either wiki or fake_news') # which dataset to use?
-    parser.add_argument('--epochs', type=int, default=25)
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--epochs', type=int, default=3) # usually no more than 1 epochs recommended even
+    parser.add_argument('--batch_size', type=int, default=32) # 128 leads to AWS instance running out of memory
+    parser.add_argument('--lr', type=float, default=3e-5)
     parser.add_argument('--clip_grad_norm', type=float, default=1.0)
     parser.add_argument('--save_frequency', type=int, default=1)
     parser.add_argument('--debug', action='store_true') # debug mode - not training or saving models
