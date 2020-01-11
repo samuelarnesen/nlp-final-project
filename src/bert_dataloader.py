@@ -19,9 +19,9 @@ pretrained_weights = 'bert-base-uncased' # for bert model
 class CustomDataset(Dataset):
     def __init__(self, x, y):
         super().__init__()
-        self.x = x
-        self.y = y
-        self._num_labels = np.max(y) + 1
+        self.x = torch.tensor(x)
+        self.y = torch.tensor(y)
+        self._num_labels = int(torch.max(y)) + 1
 
     def num_labels(self):
         return self._num_labels
@@ -32,7 +32,7 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.x)
 
-def get_wiki_data(tokenizer, cutoff=0.2, max_length=1000):
+def get_wiki_data(tokenizer, cutoff=0.2, max_length=512):
     """
     @cutoff (float): cutoff of voter proportion for a comment to be considered abusive
     @max_length (int): maximum length of input (cut off rest of comment)
@@ -58,7 +58,7 @@ def get_wiki_data(tokenizer, cutoff=0.2, max_length=1000):
     return datasets
 
 
-def get_fake_data(tokenizer, max_length=1000):
+def get_fake_data(tokenizer, max_length=512):
     body_df = pd.read_csv("../data/fake_news_bodies.csv")
     stance_df = pd.read_csv("../data/fake_news_stances.csv")
 
@@ -67,7 +67,7 @@ def get_fake_data(tokenizer, max_length=1000):
     separator = ' ' + tokenizer.sep_token + ' '
 
     x_list, y_list = [], []
-    f = lambda s: np.array(tokenizer.encode(s, pad_to_max_length=True, max_length=1000))
+    f = lambda s: np.array(tokenizer.encode(s, pad_to_max_length=True, max_length=max_length))
     for body_id, headline, stance in zip(stance_df["Body ID"], stance_df["Headline"], stance_df["Stance"]):
         body = body_df.iloc[idx_to_id[body_id]]['articleBody']
         text = headline + separator + body
