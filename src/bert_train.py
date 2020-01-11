@@ -11,7 +11,7 @@ import shutil
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler, SequentialSampler
 
 from bert_dataloader import get_wiki_data, get_fake_data
 
@@ -49,6 +49,7 @@ def evaluate(model, dataset, num_labels, batch_size=32, debugging=False):
     mean_accuracy = np.mean(predictions == truth)
     time_taken = time.time() - t_start
     print("evaluation time {}: loss {}, accuracy {}, mean prediction {}".format(time_taken,mean_loss, mean_accuracy, np.mean(predictions)))
+    """
     if num_labels == 2: # if binary, print f-beta score
         print("num labels = 2, printing F1 score")
         if np.mean(predictions == 1) == 0 or np.mean(predictions == 0) == 0:
@@ -60,10 +61,11 @@ def evaluate(model, dataset, num_labels, batch_size=32, debugging=False):
             f_beta_score = (1+beta**2) * precision * recall / (beta**2 * precision + recall)
             print("precision = {}, recall = {}, f_beta score = {} for beta = {}".format(
                 precision, recall, f_beta_score, beta))
+    """
     return mean_loss, mean_accuracy, predictions, truth
 
 # method for training transformer model on given dataset
-def train(dataset, save_dir, args, debugging=False):
+def train(dataset, save_dir, args, balance=False, debugging=False):
 
     """ prepare dataset and saving directory """
     if not debugging: new_dir(save_dir)
@@ -71,24 +73,23 @@ def train(dataset, save_dir, args, debugging=False):
     num_labels = train.num_labels()
     n = len(dataset['train'])
 
-<<<<<<< HEAD
-=======
     """ create dataloader """
-    frequencies = {}
-    for pair in train:
-        if pair[1][0] not in frequencies:
-            frequencies[pair[1][0]] = 0
-        frequencies[pair[1][0]] += 1
-    weights = []
-    for pair in train:
-        weights.append(1/frequencies[pair[1][0]])
-    sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
-    train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'], shuffle=True)
+    samples = SequentialSampler(train)
+    if balance:
+        frequencies = {}
+        for pair in train:
+            if pair[1].item() not in frequencies:
+                frequencies[pair[1].item()] = 0
+            frequencies[pair[1].item()] += 1
+        weights = []
+        for pair in train:
+            weights.append(1/frequencies[pair[1].item()])
+        sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
+    train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'])
 
->>>>>>> d95b025eb9d54473a1fa8a8e8ba9a09b46c7e7d5
     """ create model and prepare optimizer """
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
-    train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
+    #train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
@@ -118,7 +119,9 @@ def train(dataset, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
-            if (10*int(curr/args['batch_size'])) % int(n / args['batch_size']) == 0:
+            batch_frequent_check = 100 # fraction of a batch at which to log at (recommended 10-20)
+            #if (batch_frequent_check*int(curr/args['batch_size'])) % int(n / args['batch_size']) < batch_frequent_check:
+            if (int(curr/args['batch_size']) % 10 == 0):
                 print("{:4f}% through training".format(100*curr/n))
                 print("time taken so far: {}\n".format(time.time() - train_start))
 
@@ -172,6 +175,7 @@ if __name__ == "__main__":
     parser.add_argument('--clip_grad_norm', type=float, default=1.0)
     parser.add_argument('--save_frequency', type=int, default=1)
     parser.add_argument('--debug', action='store_true') # debug mode - not training or saving models
+    parser.add_argument('--balance', action='store_true') # unbalanced classes
     args = vars(parser.parse_args()) # vars casts to dictionary
     base_dir = os.getcwd() if args['dir_name'] == '' else args['dir_name']
 
@@ -187,7 +191,7 @@ if __name__ == "__main__":
         print("\twiki data loaded, time taken {}".format(time.time() - t_start))
         print("\ttraining model on wikipedia dataset")
         wiki_dir = os.path.join(base_dir, "wiki") 
-        train(dataset, wiki_dir, args, debugging=args['debug'])
+        train(dataset, wiki_dir, args, balance=args['balance'], debugging=args['debug'])
         print("\twiki model complete")
 
     if args['dataset'] in ['', 'fake_news']:
@@ -197,7 +201,7 @@ if __name__ == "__main__":
         print("\tfake data loaded, time taken {}".format(time.time() - t_start))
         print("\ttraining model on fake news dataset")
         fake_dir = os.path.join(base_dir, "fake") 
-        train(dataset, fake_dir, args, debugging=args['debug'])
+        train(dataset, fake_dir, args, balance=args['balance'], debugging=args['debug'])
         print("\tfake news model complete")
 
     print("\ntraining complete\n")
