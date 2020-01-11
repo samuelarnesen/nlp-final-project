@@ -11,7 +11,7 @@ import shutil
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from bert_dataloader import get_wiki_data, get_fake_data
 
@@ -71,9 +71,20 @@ def train(dataset, save_dir, args, debugging=False):
     num_labels = train.num_labels()
     n = len(dataset['train'])
 
+    """ create dataloader """
+    frequencies = {}
+    for pair in train:
+        if pair[1] not in frequencies:
+            frequencies[pair[1]] = 0
+        frequencies[pair[1]] += 1
+    weights = []
+    for pair in train:
+        weights.append(1/frequencies[pair[1]])
+    sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
+    train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'], shuffle=True)
+
     """ create model and prepare optimizer """
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
-    train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
