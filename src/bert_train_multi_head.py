@@ -14,9 +14,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from bert_dataloader import get_wiki_data, get_fake_data
-
-import transformers # huggingface
-from transformers import BertForSequenceClassification, BertTokenizer, AdamW, get_linear_schedule_with_warmup
+from bert_models import BertMultiHeadModel # Custom model
 
 
 # create/empty directory to save models in
@@ -48,7 +46,7 @@ def evaluate(model, dataset, num_labels, batch_size=32, debugging=False):
     mean_loss = total_loss / n
     mean_accuracy = np.mean(predictions == truth)
     time_taken = time.time() - t_start
-    print("evaluation time {}: loss {}, accuracy {}, mean prediction {}".format(time_taken,mean_loss, mean_accuracy, np.mean(predictions)))
+    print("evaluation - time {} | loss {} | accuracy {} | mean prediction {}".format(time_taken,mean_loss, mean_accuracy, np.mean(predictions)))
     if num_labels == 2: # if binary, print f-beta score
         print("num labels = 2, printing F1 score")
         if np.mean(predictions == 1) == 0 or np.mean(predictions == 0) == 0:
@@ -63,7 +61,7 @@ def evaluate(model, dataset, num_labels, batch_size=32, debugging=False):
     return mean_loss, mean_accuracy, predictions, truth
 
 # method for training transformer model on given dataset
-def train(dataset, save_dir, args, debugging=False):
+def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
 
     """ prepare dataset and saving directory """
     if not debugging: new_dir(save_dir)
@@ -71,7 +69,7 @@ def train(dataset, save_dir, args, debugging=False):
     num_labels = train.num_labels()
 
     """ create model and prepare optimizer """
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    model = BertMultiHeadModel.from_pretrained('bert-base-uncased', num_labels=[2, 4]) # wiki: 2, fake: 4
     train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
@@ -136,7 +134,7 @@ def train(dataset, save_dir, args, debugging=False):
 
 if __name__ == "__main__":
 
-    print("\nstart training\n")
+    print("\nstart training of multi-headed model\n")
 
     """ parse hyperparameters and other specifications """
     parser = argparse.ArgumentParser()
@@ -151,30 +149,19 @@ if __name__ == "__main__":
     args = vars(parser.parse_args()) # vars casts to dictionary
     base_dir = os.getcwd() if args['dir_name'] == '' else args['dir_name']
 
-    """ prepare tokenizer """
+    """ prepare dataset """
+    print("\tloading datasets")
+    t_start = time.time()
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    wiki_data = get_wiki_data(tokenizer, debugging=args['debug'])
+    fake_data = get_fake_data(tokenizer, debugging=args['debug'])
+    print("\tdatasets loaded, time taken: {}".format(time.time() - t_start))
 
-
-    """ train models """
-    if args['dataset'] in ['', 'wiki']:
-        print("\tloading wiki data")
-        t_start = time.time()
-        dataset = get_wiki_data(tokenizer, debugging=args['debug'])
-        print("\twiki data loaded, time taken {}".format(time.time() - t_start))
-        print("\ttraining model on wikipedia dataset")
-        wiki_dir = os.path.join(base_dir, "wiki") 
-        train(dataset, wiki_dir, args, debugging=args['debug'])
-        print("\twiki model complete")
-
-    if args['dataset'] in ['', 'fake_news']:
-        print("\tloading fake news data")
-        t_start = time.time()
-        dataset = get_fake_data(tokenizer, debugging=args['debug'])
-        print("\tfake data loaded, time taken {}".format(time.time() - t_start))
-        print("\ttraining model on fake news dataset")
-        fake_dir = os.path.join(base_dir, "fake") 
-        train(dataset, fake_dir, args, debugging=args['debug'])
-        print("\tfake news model complete")
+    """ train model """
+    print("\ttrain model")
+    base_dir = os.getcwd() if args['dir_name'] == '' else args['dir_name']
+    model_save_dir = os.path.join(base_dir, "multi-head") 
+    train_multi_head(wiki_data, fake_data, model_save_dir, args, args['debug'])
 
     print("\ntraining complete\n")
 

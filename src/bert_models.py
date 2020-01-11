@@ -14,15 +14,16 @@ from torch.utils.data import Dataset, TensorDataset
 import transformers # huggingface
 from transformers import BertModel, BertTokenizer, AdamW
 
+
 class BertMultiHeadModel(BertPreTrainedModel): # FAKE SEQUENCE MODEL
     def __init__(self, config):
         super(BertMultiHeadModel, self).__init__(config)
-        self.num_labels = config.num_labels
+        self.num_labels = config.num_labels # should be a list!
         self.num_tasks = 2 # CUSTOM EDIT: MANUALLY SPECIFIED NUM_TASKS
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = [nn.Linear(config.hidden_size, self.config.num_labels) for i in range(self.num_tasks)]
+        self.classifier = [nn.Linear(config.hidden_size, self.config.num_labels[i]) for i in range(self.num_tasks)]
 
         self.init_weights()
 
@@ -38,7 +39,7 @@ class BertMultiHeadModel(BertPreTrainedModel): # FAKE SEQUENCE MODEL
         labels=None,
     ):
         if type(task) != int:
-            raise Exception("BertMultiHeadModel model first input must be task index (int)!")
+            raise Exception("BertMulti model first input must be task index (int)!")
         
         outputs = self.bert(
             input_ids,
@@ -63,7 +64,7 @@ class BertMultiHeadModel(BertPreTrainedModel): # FAKE SEQUENCE MODEL
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(logits.view(-1, self.num_labels[task]), labels.view(-1))
             outputs = (loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
