@@ -74,12 +74,12 @@ def train(dataset, save_dir, args, debugging=False):
     """ create dataloader """
     frequencies = {}
     for pair in train:
-        if pair[1] not in frequencies:
-            frequencies[pair[1]] = 0
-        frequencies[pair[1]] += 1
+        if pair[1][0] not in frequencies:
+            frequencies[pair[1][0]] = 0
+        frequencies[pair[1][0]] += 1
     weights = []
     for pair in train:
-        weights.append(1/frequencies[pair[1]])
+        weights.append(1/frequencies[pair[1][0]])
     sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
     train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'], shuffle=True)
 
