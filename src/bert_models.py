@@ -18,12 +18,12 @@ from transformers import BertModel, BertTokenizer, AdamW, BertPreTrainedModel
 class BertMultiHeadModel(BertPreTrainedModel): # FAKE SEQUENCE MODEL
     def __init__(self, config):
         super(BertMultiHeadModel, self).__init__(config)
-        self.num_labels = config.num_labels # should be a list!
+        self.num_labels = [2, 4] # ignore config.num_labels # should be a list!
         self.num_tasks = 2 # CUSTOM EDIT: MANUALLY SPECIFIED NUM_TASKS
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = [nn.Linear(config.hidden_size, self.config.num_labels[i]) for i in range(self.num_tasks)]
+        self.classifier = [nn.Linear(config.hidden_size, self.num_labels[i]) for i in range(self.num_tasks)]
 
         self.init_weights()
 
