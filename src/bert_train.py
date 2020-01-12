@@ -97,6 +97,8 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
     """ train model """
     print("starting training")
     train_start = time.time()
+    last_save_time = time.time() # time since last save
+    last_save_count = 0
     for epoch in range(1 if debugging else args['epochs']):
         print("\nstarting epoch {} out of {}".format(epoch+1, args['epochs']))
         print("time taken so far: {}\n".format(time.time() - train_start))
@@ -121,9 +123,15 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
             if debugging: break # only 1 batch when debugging
             batch_frequent_check = 100 # fraction of a batch at which to log at (recommended 10-20)
             #if (batch_frequent_check*int(curr/args['batch_size'])) % int(n / args['batch_size']) < batch_frequent_check:
-            if (int(curr/args['batch_size']) % 10 == 0):
+            if time.time() - last_save_time > 3600: # 3600 seconds = 1 hour
+                last_save_time = time.time()
+                last_save_count += 1
                 print("{:4f}% through training".format(100*curr/n))
                 print("time taken so far: {}\n".format(time.time() - train_start))
+                if not debugging:
+                    path = os.path.join(save_dir, "save-count-{}".format(last_save_count))
+                    new_dir(path)
+                    model.save_pretrained(path)
 
         total_loss /= len(train)
         epoch_time = time.time() - epoch_time
@@ -136,14 +144,12 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
                 scheduler.get_lr()[0], epoch_time, total_time, total_loss))
 
         evaluate(model, dev, num_labels, batch_size=args['batch_size'], debugging=debugging) # validation
-        
-        # save model to new directory if not debugging
         if not debugging:
-            if (epoch+1) % args['save_frequency'] == 0 and epoch+1 != args['epochs']:
-                path = os.path.join(save_dir, "epoch-{}".format(epoch+1))
-                new_dir(path)
-                model.save_pretrained(path)
-            
+            last_save_count += 1
+            path = os.path.join(save_dir, "final-{}".format(last_save_count))
+            new_dir(path)
+            model.save_pretrained(path)
+    
     """ evaluate and save final model """
     print("training complete, evaluating on test dataset")
     evaluate(model, test, num_labels)
