@@ -15,19 +15,19 @@ import transformers # huggingface
 from transformers import BertForSequenceClassification, BertTokenizer, BertModel
 
 # files for storing cleaned dataset values
-wiki_x_train = "precomputed/wiki_data_x_train.pd"
-wiki_y_train = "precomputed/wiki_data_y_train.pd"
-wiki_x_dev = "precomputed/wiki_data_x_dev.pd"
-wiki_y_dev = "precomputed/wiki_data_y_dev.pd"
-wiki_x_test = "precomputed/wiki_data_x_test.pd"
-wiki_y_test = "precomputed/wiki_data_y_test.pd"
+wiki_x_train = "precomputed/wiki_data_x_train.pt"
+wiki_y_train = "precomputed/wiki_data_y_train.pt"
+wiki_x_dev = "precomputed/wiki_data_x_dev.pt"
+wiki_y_dev = "precomputed/wiki_data_y_dev.pt"
+wiki_x_test = "precomputed/wiki_data_x_test.pt"
+wiki_y_test = "precomputed/wiki_data_y_test.pt"
 
-fake_x_train = "precomputed/fake_data_x_train.pd"
-fake_y_train = "precomputed/fake_data_y_train.pd"
-fake_x_dev = "precomputed/fake_data_x_dev.pd"
-fake_y_dev = "precomputed/fake_data_y_dev.pd"
-fake_x_test = "precomputed/fake_data_x_test.pd"
-fake_y_test = "precomputed/fake_data_y_test.pd"
+fake_x_train = "precomputed/fake_data_x_train.pt"
+fake_y_train = "precomputed/fake_data_y_train.pt"
+fake_x_dev = "precomputed/fake_data_x_dev.pt"
+fake_y_dev = "precomputed/fake_data_y_dev.pt"
+fake_x_test = "precomputed/fake_data_x_test.pt"
+fake_y_test = "precomputed/fake_data_y_test.pt"
 
 
 class CustomDataset(Dataset):
@@ -51,7 +51,7 @@ def get_wiki_data(tokenizer, cutoff=0.3, max_length=512, debugging=False):
     @cutoff (float): cutoff of voter proportion for a comment to be considered abusive
     @max_length (int): maximum length of input (cut off rest of comment)
     """
-    if os.path.isfile(wiki_x_train) and not debugging: # load precomputed data
+    if os.path.isfile(wiki_x_train): # load precomputed data
         print("wiki data files exist already! loading precomputed values")
         datasets = {}
         x_train = torch.load(wiki_x_train)
@@ -105,7 +105,7 @@ def get_wiki_data(tokenizer, cutoff=0.3, max_length=512, debugging=False):
 
 
 def get_fake_data(tokenizer, max_length=512, debugging=False):
-    if os.path.isfile(fake_x_train) and not debugging: # load precomputed data
+    if os.path.isfile(fake_x_train): # load precomputed data
         print("fake news data files exist already! loading precomputed values")
         datasets = {}
         x_train = torch.load(fake_x_train)

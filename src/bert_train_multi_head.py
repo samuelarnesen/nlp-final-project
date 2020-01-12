@@ -11,10 +11,11 @@ import shutil
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler, SequentialSampler
 
 from bert_dataloader import get_wiki_data, get_fake_data
 from bert_models import BertMultiHeadModel # Custom model 
+from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
 
 
 # create/empty directory to save models in
@@ -26,42 +27,46 @@ def new_dir(dir_path):
     os.makedirs(dir_path) # check valid directory
 
 # evaluate model accuracy and loss on given dataset
-def evaluate(model, dataset, num_labels, batch_size=32, debugging=False):
+def evaluate(model, wiki_data, fake_data, batch_size=32, debugging=False):
     t_start = time.time()
     model.eval()
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-    n = len(dataset)
-    predictions = np.zeros(n) # used for confusion matrix
-    truth = np.zeros(n)
-    total_loss = 0
-    curr = 0
-    with torch.no_grad():
-        for (x, y) in dataloader:
-            pred = model(x, labels=y)
-            predictions[curr:min(n,curr+batch_size)] = torch.argmax(pred[1], axis=1)
-            truth[curr:min(n,curr+batch_size)] = y
-            total_loss += pred[0].item()
-            curr += batch_size
-            if debugging: break # one batch if debugging
-    mean_loss = total_loss / n
-    mean_accuracy = np.mean(predictions == truth)
-    time_taken = time.time() - t_start
-    print("evaluation - time {} | loss {} | accuracy {} | mean prediction {}".format(time_taken,mean_loss, mean_accuracy, np.mean(predictions)))
-    if num_labels == 2: # if binary, print f-beta score
-        print("num labels = 2, printing F1 score")
-        if np.mean(predictions == 1) == 0 or np.mean(predictions == 0) == 0:
-            print("all predictions are {}".format(np.mean(predictions)))
-        else:
-            precision = np.mean(predictions == truth) / np.mean(predictions == 1)
-            recall = np.mean(predictions == truth) / np.mean(truth == 1)
-            # higher beta -> prioritize precision, lower beta -> prioritize recall
-            f_beta_score = (1+beta**2) * precision * recall / (beta**2 * precision + recall)
-            print("precision = {}, recall = {}, f_beta score = {} for beta = {}".format(
-                precision, recall, f_beta_score, beta))
-    return mean_loss, mean_accuracy, predictions, truth
+    wiki_loader = DataLoader(wiki_data, batch_size=batch_size)
+    fake_loader = DataLoader(fake_data, batch_size=batch_size)
+    for name, loader, n in zip(['wiki', 'fake'], [wiki_loader, fake_loader], [len(wiki_data), len(fake_data)]):
+        predictions = np.zeros(n) # used for confusion matrix
+        truth = np.zeros(n)
+        total_loss = 0
+        curr = 0
+        with torch.no_grad():
+            for (x, y) in loader:
+                head = 0 if name == 'wiki' else 1 # which model head to use
+                pred = model(head, x, labels=y)
+                predictions[curr:min(n,curr+batch_size)] = torch.argmax(pred[1], axis=1)
+                truth[curr:min(n,curr+batch_size)] = y
+                total_loss += pred[0].item()
+                curr += batch_size
+                if debugging: break # one batch if debugging
+        mean_loss = total_loss / n
+        mean_accuracy = np.mean(predictions == truth)
+        time_taken = time.time() - t_start
+        print("evaluation for " + name)
+        print("time {}: loss {}, accuracy {}, mean prediction {}".format(
+            time_taken, mean_loss, mean_accuracy, np.mean(predictions)))
+
+def create_sampler(train): # train == dataset
+    frequencies = {}
+    for pair in train: # pair = (x, y)
+        if pair[1].item() not in frequencies:
+            frequencies[pair[1].item()] = 0
+        frequencies[pair[1].item()] += 1
+    weights = []
+    for pair in train:
+        weights.append(1/frequencies[pair[1].item()])
+    sampler = WeightedRandomSampler(weights=weights, num_samples=len(train))
+    return sampler
 
 # method for training transformer model on given dataset
-def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
+def train_multi_head(wiki_data, fake_data, save_dir, args, balance=False, debugging=False):
 
     """ prepare dataset and saving directory """
     if not debugging: new_dir(save_dir)
@@ -69,31 +74,48 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
     fake_train, fake_dev, fake_test = fake_data['train'], fake_data['dev'], fake_data['test']
     wiki_num_labels, fake_num_labels = wiki_train.num_labels(), fake_train.num_labels()
     wiki_n, fake_n = len(wiki_train), len(fake_train)
+    n = min(wiki_n, fake_n) * 2
 
-    """ create model and prepare optimizer """
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
-    train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
+    """ create dataloader and model """
+    wiki_sampler = create_sampler(wiki_train) if balance else SequentialSampler(wiki_train)
+    wiki_dataloader = DataLoader(wiki_train, sampler=wiki_sampler, batch_size=args['batch_size'])
+    fake_sampler = create_sampler(fake_train) if balance else SequentialSampler(fake_train)
+    fake_dataloader = DataLoader(fake_train, sampler=fake_sampler, batch_size=args['batch_size'])
+
+    model = BertMultiHeadModel.from_pretrained('bert-base-uncased', num_labels=[2, 4])
     optimizer = AdamW(model.parameters(), lr=args['lr'])
-    total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
+    total_steps = (len(wiki_dataloader) + len(fake_dataloader)) * 2 # number of batches * number of epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
-    
+
     """ train model """
     print("starting training")
     train_start = time.time()
+    last_save_time = time.time() # time since last save
+    last_save_count = 0
     for epoch in range(1 if debugging else args['epochs']):
         print("\nstarting epoch {} out of {}".format(epoch+1, args['epochs']))
         model.train() # turn on train mode (turned off in evaluate)
         total_loss = 0.
         curr = 0
-        predictions = np.zeros(args['batch_size'] if debugging else n) # used for confusion matrix
-        truth = np.zeros(args['batch_size'] if debugging else n)
+        wiki_accuracies = []
+        fake_accuracies = []
         epoch_time = time.time()
-        for (x_batch, y_batch) in train_dataloader: # different shuffle each time
+        for (x_wiki, y_wiki), (x_fake, y_fake) in zip(wiki_dataloader, fake_dataloader): # different shuffle each time
             optimizer.zero_grad()
-            output = model(x_batch, labels=y_batch)
+            # train on wiki
+            output = model(0, x_wiki, labels=y_wiki) # 0 => wiki head
             loss, preds = output[0], output[1]
-            predictions[curr:min(n,curr+args['batch_size'])] = torch.argmax(preds, axis=1)
-            truth[curr:min(n,curr+args['batch_size'])] = y_batch
+            wiki_accuracies.append(np.mean(np.array(torch.argmax(preds, axis=1) == y_wiki)))
+            total_loss += loss.item()
+            curr += args['batch_size']
+            loss.backward() # loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args['clip_grad_norm'])
+            optimizer.step()
+            scheduler.step()
+            # train on fake news
+            output = model(1, x_fake, labels=y_fake) # 1 => fake news head
+            loss, preds = output[0], output[1]
+            fake_accuracies.append(np.mean(np.array(torch.argmax(preds, axis=1) == y_fake)))
             total_loss += loss.item()
             curr += args['batch_size']
             loss.backward() # loss.backward()
@@ -101,21 +123,28 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
-            if (10*int(curr/args['batch_size'])) % int(n / args['batch_size']) == 0:
+            if time.time() - last_save_time > 3600: # 3600 seconds = 1 hour
+                last_save_time = time.time()
+                last_save_count += 1
                 print("{:4f}% through training".format(100*curr/n))
-                print("time taken so far: {}\n".format(time.time() - train_start))
+                print("time taken so far: {}".format(time.time() - train_start))
+                print("mean accuracy so far (wiki, fake): {}, {}\n".format(np.mean(wiki_accuracies), np.mean(fake_accuracies)))
+                #if not debugging:
+                path = os.path.join(save_dir, "save-count-{}".format(last_save_count))
+                new_dir(path)
+                model.save_pretrained(path)
 
-        total_loss /= len(train)
+        total_loss /= n
         epoch_time = time.time() - epoch_time
         total_time = time.time() - train_start
-        accuracy = np.mean(predictions == truth)
+        accuracy = (np.mean(wiki_accuracies) + np.mean(fake_accuracies)) / 2
         
         # print info from this training epoch
         print('train - epoch {:3d} | accuracy {:5.5f} | {:5d} samples | lr {:02.3f} | epoch time {:5.2f} | '
-              'total time {:5.2f} | mean loss {:5.5f}'.format(epoch+1, accuracy, len(train), 
+              'total time {:5.2f} | mean loss {:5.5f}'.format(epoch+1, accuracy, n, 
                 scheduler.get_lr()[0], epoch_time, total_time, total_loss))
 
-        evaluate(model, dev, num_labels, batch_size=args['batch_size'], debugging=debugging) # validation
+        evaluate(model, wiki_dev, fake_dev, batch_size=args['batch_size'], debugging=debugging) # validation
         
         # save model to new directory if not debugging
         if not debugging:
@@ -125,7 +154,7 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, debugging=False):
             
     """ evaluate and save final model """
     print("training complete, evaluating on test dataset")
-    evaluate(model, test, num_labels)
+    evaluate(model, wiki_test, fake_test)
     if not debugging:
         path = os.path.join(save_dir, "final")
         model.save_pretrained(path)
@@ -147,12 +176,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir_name', type=str, default='') # location to store trained models in
     parser.add_argument('--dataset', type=str, default='', help='either wiki or fake_news') # which dataset to use?
-    parser.add_argument('--epochs', type=int, default=1)
+    parser.add_argument('--epochs', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=32) # max possible
     parser.add_argument('--lr', type=float, default=2e-5)
     parser.add_argument('--clip_grad_norm', type=float, default=1.0)
     parser.add_argument('--save_frequency', type=int, default=1)
     parser.add_argument('--debug', action='store_true') # debug mode - not training or saving models
+    parser.add_argument('--balance', action='store_true') # unbalanced classes
     args = vars(parser.parse_args()) # vars casts to dictionary
     base_dir = os.getcwd() if args['dir_name'] == '' else args['dir_name']
 
@@ -168,7 +198,7 @@ if __name__ == "__main__":
     print("\ttrain model")
     base_dir = os.getcwd() if args['dir_name'] == '' else args['dir_name']
     model_save_dir = os.path.join(base_dir, "multi-head") 
-    train_multi_head(wiki_data, fake_data, model_save_dir, args, args['debug'])
+    train_multi_head(wiki_data, fake_data, model_save_dir, args, args['balance'], args['debug'])
 
     print("\ntraining complete\n")
 

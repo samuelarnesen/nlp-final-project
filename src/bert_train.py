@@ -74,7 +74,7 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
     n = len(dataset['train'])
 
     """ create dataloader """
-    samples = SequentialSampler(train)
+    sampler = SequentialSampler(train)
     if balance:
         frequencies = {}
         for pair in train:
@@ -88,7 +88,9 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
     train_dataloader = DataLoader(train, sampler=sampler, batch_size=args['batch_size'])
 
     """ create model and prepare optimizer """
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    #model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    # CONTINUE TRAINING WIKI MODEL!!!
+    model = BertForSequenceClassification.from_pretrained("../wiki-epoch-5")
     #train_dataloader = DataLoader(train, batch_size=args['batch_size'], shuffle=True)
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = len(train_dataloader) * args['epochs'] # number of batches * number of epochs
@@ -121,8 +123,6 @@ def train(dataset, save_dir, args, balance=False, debugging=False):
             optimizer.step()
             scheduler.step()
             if debugging: break # only 1 batch when debugging
-            batch_frequent_check = 100 # fraction of a batch at which to log at (recommended 10-20)
-            #if (batch_frequent_check*int(curr/args['batch_size'])) % int(n / args['batch_size']) < batch_frequent_check:
             if time.time() - last_save_time > 3600: # 3600 seconds = 1 hour
                 last_save_time = time.time()
                 last_save_count += 1

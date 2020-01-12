@@ -12,7 +12,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.utils.data import Dataset, TensorDataset
 import transformers # huggingface
-from transformers import BertModel, BertTokenizer, AdamW
+from transformers import BertModel, BertTokenizer, AdamW, BertPreTrainedModel
 
 
 class BertMultiHeadModel(BertPreTrainedModel): # FAKE SEQUENCE MODEL
