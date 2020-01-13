@@ -82,7 +82,7 @@ def train_multi_head(wiki_data, fake_data, save_dir, args, balance=False, debugg
     fake_sampler = create_sampler(fake_train) if balance else SequentialSampler(fake_train)
     fake_dataloader = DataLoader(fake_train, sampler=fake_sampler, batch_size=args['batch_size'])
 
-    model = BertMultiHeadModel.from_pretrained('bert-base-uncased', num_labels=[2, 4])
+    model = BertMultiHeadModel.from_pretrained("../multi-epoch-6")
     optimizer = AdamW(model.parameters(), lr=args['lr'])
     total_steps = (len(wiki_dataloader) + len(fake_dataloader)) * 2 # number of batches * number of epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)

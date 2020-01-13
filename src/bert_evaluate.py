@@ -35,7 +35,7 @@ def get_preds_truth(model, dataset, early_cutoff=0, batch=32, head=None):
         preds[curr:min(n, curr+batch)] = torch.argmax(output[0], axis=1)
         truth[curr:min(n, curr+batch)] = y_batch
         curr += batch
-        if curr >= early_cutoff: break
+        if curr >= n: break
     print("getting preds and truth complete, time taken: {}\n".format(time.time() - t_start))
     return preds, truth
 
@@ -107,33 +107,41 @@ def eval_fake(model, early_cutoff=None, batch=32):
         pickle.dump(d, file)
     return
 
-def eval_multi_head(model, early_cutoff=None, batch=32):
+def eval_multi_head(model, dataset='both', early_cutoff=None, batch=32):
     """ load model and data """
     print("\nevaluating multi-head model on datasets\n")
     model.eval()
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    wiki_data = get_wiki_data(tokenizer)
-    fake_data = get_fake_data(tokenizer)
-    wiki_test_data = wiki_data['test']
-    fake_test_data = fake_data['test']
 
-    """ get results and print evaluation metrics """
-    wiki_preds, wiki_truth = get_preds_truth(model, wiki_test_data, early_cutoff=early_cutoff, batch=batch, head=0)
-    fake_preds, fake_truth = get_preds_truth(model, fake_test_data, early_cutoff=early_cutoff, batch=batch, head=1)
-    print("evaluation metrics for multi-head model")
-    print_reg_scores(wiki_preds, wiki_truth, multi_label=False)
-    print_reg_scores(fake_preds, fake_truth, multi_label=True)
-    print_f1_scores(wiki_preds, wiki_truth, multi_label=False)
-    print_f1_scores(fake_preds, fake_truth, multi_label=True)
+    """ wiki dataset """
+    if dataset in ['both', 'wiki']:
+        wiki_data = get_wiki_data(tokenizer)
+        wiki_test_data = wiki_data['test']
+        """ get results and print evaluation metrics """
+        wiki_preds, wiki_truth = get_preds_truth(model, wiki_test_data, early_cutoff=early_cutoff, batch=batch, head=0)
+        print("evaluation metrics for multi-head model")
+        print_reg_scores(wiki_preds, wiki_truth, multi_label=False)
+        print_f1_scores(wiki_preds, wiki_truth, multi_label=False)
+        """ save results """
+        print("\nsaving dict with preds and truth in multi_pickle\n")
+        d = {'preds': wiki_preds, 'truth': wiki_truth}
+        with open('multi_wiki_pickle.p', 'wb') as file:
+            pickle.dump(d, file)
 
-    """ save results """
-    print("\nsaving dict with preds and truth in multi_pickle\n")
-    d = {
-        'wiki':{'preds': wiki_preds, 'truth': wiki_truth},
-        'fake':{'preds': fake_preds, 'truth': fake_truth}
-    }
-    with open('multi_pickle.p', 'wb') as file:
-        pickle.dump(d, file)
+    """ fake news dataset """
+    if dataset in ['both', 'fake']:
+        fake_data = get_fake_data(tokenizer)
+        fake_test_data = fake_data['test']
+        """ get results and print evaluation metrics """
+        fake_preds, fake_truth = get_preds_truth(model, fake_test_data, early_cutoff=early_cutoff, batch=batch, head=1)
+        print_reg_scores(fake_preds, fake_truth, multi_label=True)
+        print_f1_scores(fake_preds, fake_truth, multi_label=True)
+        """ save results """
+        print("\nsaving dict with preds and truth in multi_pickle\n")
+        d = {'preds': fake_preds, 'truth': fake_truth}
+        with open('multi_fake_pickle.p', 'wb') as file:
+            pickle.dump(d, file)
+
     return
 
 
@@ -141,14 +149,15 @@ def eval_multi_head(model, early_cutoff=None, batch=32):
 
 if __name__ == "__main__":
 
-    print("\bert_evaluate\n")
+    print("\nbert_evaluate\n")
 
     """ parse hyperparameters and other specifications """
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir_name', type=str, default='') # location to store trained models in
-    parser.add_argument('--model', type=str, default='') # usually no more than 1 epochs recommended even
-    parser.add_argument('--early_cutoff', type=int, default=0) # debug mode - not training or saving models
-    parser.add_argument('--batch_size', type=int, default=32) # debug mode - not training or saving models
+    parser.add_argument('--model', type=str, default='') # fake, wiki, multi
+    parser.add_argument('--early_cutoff', type=int, default=0) # debug mode - few epochs
+    parser.add_argument('--batch_size', type=int, default=32) 
+    parser.add_argument('--dataset', type=str, default='wiki') # wiki, fake, or both
     args = vars(parser.parse_args()) # vars casts to dictionary
 
     """ check inputs """
@@ -167,7 +176,7 @@ if __name__ == "__main__":
     if args['model'] == 'multi':
         config_name = PretrainedConfig().from_json_file(os.path.join(args['dir_name'], "config.json"))
         model = BertMultiHeadModel.from_pretrained(os.path.join(args['dir_name'], "pytorch_model.bin"), config=config_name)
-        eval_multi_head(model, early_cutoff=args['early_cutoff'], batch=args['batch_size'])
+        eval_multi_head(model, dataset=args['dataset'], early_cutoff=args['early_cutoff'], batch=args['batch_size'])
 
     print("\nbert_evaluate complete\n")
 
