@@ -35,6 +35,8 @@ def get_preds_truth(model, dataset, early_cutoff=0, batch=32, head=None):
         preds[curr:min(n, curr+batch)] = torch.argmax(output[0], axis=1)
         truth[curr:min(n, curr+batch)] = y_batch
         curr += batch
+        if (10*curr) % (batch * int(n / batch)) == 0: 
+            print("{:4f}% through training, time taken: {}".format(100*curr/n, time.time() - t_start))
         if curr >= n: break
     print("getting preds and truth complete, time taken: {}\n".format(time.time() - t_start))
     return preds, truth

@@ -178,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='', help='either wiki or fake_news') # which dataset to use?
     parser.add_argument('--epochs', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=32) # max possible
-    parser.add_argument('--lr', type=float, default=2e-5)
+    parser.add_argument('--lr', type=float, default=3e-5)
     parser.add_argument('--clip_grad_norm', type=float, default=1.0)
     parser.add_argument('--save_frequency', type=int, default=1)
     parser.add_argument('--debug', action='store_true') # debug mode - not training or saving models
